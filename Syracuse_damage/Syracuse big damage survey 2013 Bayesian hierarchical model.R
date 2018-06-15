@@ -96,8 +96,8 @@ model {
   }
 
 #priors
-  b0 ~ dnorm(0, 3.68)
-  b.prov ~ dnorm(0, 3.68)
+  b0 ~ dnorm(0, 0.00001)
+  b.prov ~ dnorm(0, 0.00001)
   b.range ~ dnorm(0, 0.00001)
   b.leafn ~ dnorm(0, 0.00001)
   b.lignin ~ dnorm(0, 0.00001)
@@ -125,7 +125,7 @@ fungal <- jags.model('mod1.R', data = fungal.data, #inits = fungal.inits, #param
                      n.chains = 3)
 
 fungal.coda <- coda.samples(fungal, 
-                            variable.names = c("b0", "b.prov", 'b.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma", 'diff.damage'), 
+                            variable.names = c("b0", "b.prov", 'b.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma"), 
                             n.iter = 10000, n.thin = 1)
   summary(fungal.coda)
   
