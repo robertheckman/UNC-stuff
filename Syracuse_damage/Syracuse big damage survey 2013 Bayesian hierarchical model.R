@@ -78,62 +78,58 @@ cor(damage[,unlist(lapply(damage, is.numeric))], use = 'pairwise.complete.obs')
 
 
 # standardize indepedent continuous variables
-# enables effect size comparisons with binary input variables and facilitate model convergence
-standard <- function(x) (x - mean(x, na.rm = T)) / (2 * sd(x, na.rm = T))
-
-prov <- as.numeric(damage$Provenance) - 1
-range <- standard(damage$range)
-leafn <- standard(damage$tissue.N)
-lignin <- standard(damage$lignin.mass)
-
-
-y <- car::logit(damage$fungal / 100)
-N <- length(y)
+standard <- function(x) (x - mean(x, na.rm = T)) / (sd(x, na.rm = T))
 
 
 sink('mod1.R')
 cat("
 model {
-#likelihood
+
   for(i in 1:N) {
-    y[i] ~ dnorm(y.hat[i], tau.y)
-    y.hat[i] <- b0 + b.prov * prov[i] + b.range * range[i] + b.leafn * leafn[i] + b.lignin * lignin[i] +
+    mu[i] <- b0 + b.prov * prov[i] + b.range * range[i] + b.leafn * leafn[i] + b.lignin * lignin[i] +
       b.provleafn * prov[i] * leafn[i] + b.provlignin * prov[i] * lignin[i] + 
       b.provleafnlignin * prov[i] * leafn[i] * lignin[i]
+
+    # Likelihood
+      y[i] ~ dnorm(mu[i], tau)
+
   }
 
 #priors
-  b0 ~ dnorm(0, 0.00001)
-  b.prov ~ dnorm(0, 0.00001)
+  b0 ~ dnorm(0, 3.68)
+  b.prov ~ dnorm(0, 3.68)
   b.range ~ dnorm(0, 0.00001)
   b.leafn ~ dnorm(0, 0.00001)
   b.lignin ~ dnorm(0, 0.00001)
   b.provleafn ~ dnorm(0, 0.00001)
   b.provlignin ~ dnorm(0, 0.00001)
   b.provleafnlignin ~ dnorm(0, 0.00001)
-  tau.y <- 1 / sigma.y^2
-  sigma.y ~ dunif(0,10000)
+  tau <- 1 / sigma^2
+  sigma ~ dunif(0, 50)
+
+
 } #end model
 
 ", fill = TRUE)
 sink()
 
-# write model to text file for JAGS
 
+fungal.data <- list(prov = as.numeric(damage$Provenance) - 1,
+                    range = standard(damage$range),
+                    leafn = standard(damage$tissue.N),
+                    lignin = standard(damage$lignin.mass),
+                    y = car::logit(damage$fungal), 
+                    N = length(y))
 
-fungal.data <- list("N", "y", "prov", 'range', 'leafn', 'lignin')
-fungal.inits <- function() {list(b0 = rnorm(1), b.prov = rnorm(1), b.range = rnorm(1), b.leafn = rnorm(1),  b.provleafn = rnorm(1),
-                                 sigma.y = runif(1))}
-fungal.parameters <- c("b0", "b.prov", 'b.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin',   "sigma.y")
+fungal <- jags.model('mod1.R', data = fungal.data, #inits = fungal.inits, #parameters.to.save = fungal.parameters, 
+                     n.chains = 3)
 
-fungal <- jags(fungal.data, fungal.inits, fungal.parameters, "mod1.R", n.chains = 3, n.iter = 1000, n.burnin = 500)
-fungal
+fungal.coda <- coda.samples(fungal, 
+                            variable.names = c("b0", "b.prov", 'b.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma", 'diff.damage'), 
+                            n.iter = 10000, n.thin = 1)
+  summary(fungal.coda)
+  
 
-s <- ggs(as.mcmc(fungal))
-ggs_traceplot(s)#, family= c("b0", "b.prov", 'b.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma.y")) #examine to ensure no bias among runs (overlapping lines)
-
-#examine posteriors
-attach.jags(fungal) #makes posterior distributions an object
 
 
 ## --------------------------------------------------------------*
