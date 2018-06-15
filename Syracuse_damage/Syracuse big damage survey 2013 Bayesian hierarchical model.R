@@ -87,7 +87,7 @@ leafn <- standard(damage$tissue.N)
 lignin <- standard(damage$lignin.mass)
 
 
-y <- damage$fungal
+y <- car::logit(damage$fungal / 100)
 N <- length(y)
 
 
@@ -96,7 +96,7 @@ cat("
 model {
 #likelihood
   for(i in 1:N) {
-    y[i] ~ dbeta(y.hat[i], tau.y)
+    y[i] ~ dnorm(y.hat[i], tau.y)
     y.hat[i] <- b0 + b.prov * prov[i] + b.range * range[i] + b.leafn * leafn[i] + b.lignin * lignin[i] +
       b.provleafn * prov[i] * leafn[i] + b.provlignin * prov[i] * lignin[i] + 
       b.provleafnlignin * prov[i] * leafn[i] * lignin[i]
@@ -111,7 +111,7 @@ model {
   b.provleafn ~ dnorm(0, 0.00001)
   b.provlignin ~ dnorm(0, 0.00001)
   b.provleafnlignin ~ dnorm(0, 0.00001)
-  tau.y <- pow(sigma.y, -2)
+  tau.y <- 1 / sigma.y^2
   sigma.y ~ dunif(0,10000)
 } #end model
 
@@ -130,7 +130,7 @@ fungal <- jags(fungal.data, fungal.inits, fungal.parameters, "mod1.R", n.chains 
 fungal
 
 s <- ggs(as.mcmc(fungal))
-ggs_traceplot(s, family= c("b0", "b.prov", 'b.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma.y")) #examine to ensure no bias among runs (overlapping lines)
+ggs_traceplot(s)#, family= c("b0", "b.prov", 'b.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma.y")) #examine to ensure no bias among runs (overlapping lines)
 
 #examine posteriors
 attach.jags(fungal) #makes posterior distributions an object
