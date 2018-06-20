@@ -13,21 +13,14 @@
 ### The factors don't really load in a clean manner, not sure it's useful.                  ###
 ###############################################################################################
 
-#this R script interacts with JAGS, which must be installed from here:
-#http://mcmc-jags.sourceforge.net/
-#no need to open JAGS separately when you run R; it works in the background
+
 
 #must have R2jags package installed in R, and ggmcmc if you want to run some chain diagnostics (not essential)
 require(R2jags) 
 require(ggmcmc)
 require(ape) #for phylogeny
 require(geiger) #for matching tree and traits
-require(plyr)
-require(dplyr)
-require(tidyr)
-
-#set working directory
-#setwd("C:/Users/rwheckma/Dropbox/Back up/Research/UNC Data/Syracuse Damage Surveys") 
+require(tidyverse)
 
 
 ## -----------------------------------------------------*
@@ -71,6 +64,7 @@ damage <- read.csv('./UNC Data/Syracuse Damage Surveys/Syracuse big damage surve
 # Performs correlations amongs all numerical variables for which there are pairwise observations
 # No surprises, everything looks reasonably uncorrelated, including leaf functional traits
 cor(damage[,unlist(lapply(damage, is.numeric))], use = 'pairwise.complete.obs')
+
 
 ## -----------------------------------------------------*
 ## ---- Fixed Effects Bayesian model ----
@@ -119,7 +113,7 @@ fungal.data <- list(prov = as.numeric(damage$Provenance) - 1,
                     leafn = standard(damage$tissue.N),
                     lignin = standard(damage$lignin.mass),
                     y = car::logit(damage$fungal), 
-                    N = length(y))
+                    N = length(fungal.data$y))
 
 fungal <- jags.model('mod1.R', data = fungal.data, #inits = fungal.inits, #parameters.to.save = fungal.parameters, 
                      n.chains = 3)
@@ -136,32 +130,18 @@ fungal.coda <- coda.samples(fungal,
 ## ---- Mixed Effects Bayesian model, Species, Genus, Family ----
 ## --------------------------------------------------------------*
 
-# Turn random effects (family, genus, species) into numeric vectors
-family = as.numeric(factor(damage$family))
-genus = as.numeric(factor(damage$Genus))
-species = as.numeric(factor(damage$Species))
-
-
-# Get length for each group
-N.family = length(unique(family))
-N.genus = length(unique(genus))
-N.species = length(unique(species))
-
-
-
-y <- damage$fungal
-N <- length(y)
-
 
 sink('mod2.R')
 cat("
     model {
-    #likelihood
-    for(i in 1:N) {
-    y[i] ~ dnorm(y.hat[i], tau.y)
-    y.hat[i] <- b0 + b.prov * prov[i] + b.range * range[i] + b.leafn * leafn[i] + b.lignin * lignin[i] +
+     for(i in 1:N) {
+    mu[i] <- b0 + b.prov * prov[i] + b.range * range[i] + b.leafn * leafn[i] + b.lignin * lignin[i] +
     b.provleafn * prov[i] * leafn[i] + b.provlignin * prov[i] * lignin[i] + 
     b.provleafnlignin * prov[i] * leafn[i] * lignin[i]
+    
+    # Likelihood
+    y[i] ~ dnorm(mu[i], tau)
+    
     }
     
     #priors
@@ -173,8 +153,8 @@ cat("
     b.provleafn ~ dnorm(0, 0.00001)
     b.provlignin ~ dnorm(0, 0.00001)
     b.provleafnlignin ~ dnorm(0, 0.00001)
-    tau.y <- pow(sigma.y, -2)
-    sigma.y ~ dunif(0,10000)
+    tau <- 1 / sigma^2
+    sigma ~ dunif(0, 50)
     } #end model
     
     ", fill = TRUE)
@@ -228,22 +208,33 @@ mod.2 <- "model
 
 }" #end model
 
-  # write model to text file for JAGS
-  write(mod.2, "model2.txt")
+
   
 
-  #input lists for JAGs
-  fungal.data2 <- list(N = N, y = y, prov = prov, range = range, leafn = leafn,  species = species, N.species = N.species, 
-                       genus = genus, N.genus = N.genus, family = family, N.family = N.family)
-  fungal.inits2 <- function() {list(b0 = rnorm(1))}
-  fungal.parameters2 <- c("b0", "b.prov", 'b.range', 'b.leafn', 'b.provleafn')
+# Input lists for JAGs
   
-  fungal.2 <- jags(fungal.data2, fungal.inits2, fungal.parameters2, "model2.txt", n.chains = 3, n.iter = 1000, n.burnin = 500)
-  fungal.2
-  
-  s <- ggs(as.mcmc(fungal.2))
-  ggs_traceplot(s, family = "b0") #examine to ensure no bias among runs (overlapping lines)
-  
-  #examine posteriors
-  attach.jags(fungal.2) #makes posterior distributions an object
+fungal2.data <- list(prov = as.numeric(damage$Provenance) - 1,
+                     range = standard(damage$range),
+                     leafn = standard(damage$tissue.N),
+                     lignin = standard(damage$lignin.mass),
+                     y = car::logit(damage$fungal), 
+                     N = length(fungal.data$y), 
+                     # Turn random effects (family, genus, species) into numeric vectors
+                     family = as.numeric(factor(damage$family)),
+                     genus = as.numeric(factor(damage$Genus)),
+                     species = as.numeric(factor(damage$Species)),
+                     # Get length for each group
+                     N.family = length(unique(fungal.data.2$family)),
+                     N.genus = length(unique(fungal.data.2$genus)),
+                     N.species = length(unique(fungal.data.2$species)))
+
+
+fungal2 <- jags.model('mod2.R', data = fungal2.data, #inits = fungal.inits, #parameters.to.save = fungal.parameters, 
+                     n.chains = 3)
+
+fungal2.coda <- coda.samples(fungal2, 
+                             variable.names = c("b0", "b.prov", 'b.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma"), 
+                             n.iter = 10000, n.thin = 1)
+summary(fungal2.coda)
+
   
