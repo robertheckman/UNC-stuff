@@ -220,15 +220,15 @@ fungal2 <- jags.model('mod2.R', data = fungal2.data, #inits = fungal.inits, #par
                      n.chains = 3)
 
 fungal2.coda <- coda.samples(fungal2, 
-                             variable.names = c("b.prov", 'b.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma"), 
+                             variable.names = c('alpha', "b.prov", 'b.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma"), 
                              n.iter = 10000, n.thin = 1)
 summary(fungal2.coda)
 
   
 
-## --------------------------------------------------------------------------*
-## ---- Mixed Effects Bayesian model, Genus and Species-level intercepts ----
-## --------------------------------------------------------------------------*
+## ----------------------------------------------------------------------------*
+## ---- Mixed Effects Bayesian model, Species-level intercepts and effects ----
+## ----------------------------------------------------------------------------*
 
 
 sink('mod3.R')
@@ -239,28 +239,23 @@ cat("
     #  for(i in 1:N) { #loop over observations
     #  y[i] ~ dnorm(mu[i], x.tau) #leafout times are normally distributed
     #  mu[i] <- b0 			#overall intercept
-    #  + b.family[family[i]] 		#family effect
     #  + b.genus[genus[i]] 		#genus effect
     #  + b.species[species[i]] 	#species effect
     #  }
     
-    
-    #  for(i in 1:N.family) {
-    #    b.family[i] ~ dnorm(0, family.tau) # family effect (mean, variance)
+
+    #for(k in 1:N.genus) {
+    #alpha.genus[k] ~ dnorm(mu.genus, tau.genus) # genus random effect
     #  }	
     
     
-    for(k in 1:N.genus) {
-    alpha.genus[k] ~ dnorm(mu.genus, tau.genus) # genus random effect
-      }	
-    
-    
     for(j in 1:N.species) {
-    alpha.species[j] ~ dnorm(mu.species, tau.species) # species effect (mean and variance)
+    alpha[j] ~ dnorm(mu.species[j], tau.species) # species effect (mean and variance)
+    mu.species[j] <- kappa + c.prov * prov[j] + c.range * range[j]
     }
     
     for(i in 1:length(y)) {
-    mu[i] <-  alpha[genus[species[i]]] + b.prov * prov[i] + b.range * range[i] + b.leafn * leafn[i] + b.lignin * lignin[i] +
+    mu[i] <-  alpha[species[i]] + b.leafn * leafn[i] + b.lignin * lignin[i] +
     b.provleafn * prov[i] * leafn[i] + b.provlignin * prov[i] * lignin[i] + 
     b.provleafnlignin * prov[i] * leafn[i] * lignin[i] # fixed effects
     y[i] ~ dnorm(mu[i], tau)
@@ -270,19 +265,17 @@ cat("
     # priors for variance components
     #  x.tau <- x.sigma^-2
     #  x.sigma ~ dunif(0, 100)  
-    #  family.tau <- family.sigma^-2
-    #  family.sigma ~ dunif(0, 100)
-    tau.genus <- sigma.genus^-2
-    sigma.genus ~ dunif(0, 100)
+    #tau.genus <- sigma.genus^-2
+    #sigma.genus ~ dunif(0, 100)
     tau.species <- sigma.species^-2 
     sigma.species ~ dunif(0, 100) 
-    mu.species ~ dnorm(5, 1)
+    kappa ~ dnorm(0, 0.00001)
     
     
     # priors for fixed effects
     #    b0 ~ dnorm(0, 0.00001)
-    b.prov ~ dnorm(0, 0.00001)
-    b.range ~ dnorm(0, 0.00001)
+    c.prov ~ dnorm(0, 0.00001)
+    c.range ~ dnorm(0, 0.00001)
     b.leafn ~ dnorm(0, 0.00001)
     b.lignin ~ dnorm(0, 0.00001)
     b.provleafn ~ dnorm(0, 0.00001)
@@ -301,7 +294,7 @@ sink()
 
 # Input lists for JAGs
 
-fungal2.data <- list(prov = as.numeric(damage$Provenance) - 1,
+fungal3.data <- list(prov = as.numeric(damage$Provenance) - 1,
                      range = standard(damage$range),
                      leafn = standard(damage$tissue.N),
                      lignin = standard(damage$lignin.mass),
@@ -316,12 +309,104 @@ fungal2.data <- list(prov = as.numeric(damage$Provenance) - 1,
                      N.species = length(unique(damage$Species)))
 
 
-fungal2 <- jags.model('mod2.R', data = fungal2.data, #inits = fungal.inits, #parameters.to.save = fungal.parameters, 
+fungal3 <- jags.model('mod3.R', data = fungal3.data, #inits = fungal.inits, #parameters.to.save = fungal.parameters, 
                       n.chains = 3)
 
-fungal2.coda <- coda.samples(fungal2, 
-                             variable.names = c("b.prov", 'b.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma"), 
+fungal3.coda <- coda.samples(fungal3, 
+                             variable.names = c('alpha', "c.prov", 'c.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma"), 
                              n.iter = 10000, n.thin = 1)
-summary(fungal2.coda)
+summary(fungal3.coda)
+
+
+## ----------------------------------------------------------------------------*
+## ---- Mixed Effects Bayesian model, Species-level intercepts and effects ----
+## ----------------------------------------------------------------------------*
+
+
+sink('mod3.R')
+cat("
+    model {
+    
+    #{
+    #  for(i in 1:N) { #loop over observations
+    #  y[i] ~ dnorm(mu[i], x.tau) #leafout times are normally distributed
+    #  mu[i] <- b0 			#overall intercept
+    #  + b.genus[genus[i]] 		#genus effect
+    #  + b.species[species[i]] 	#species effect
+    #  }
+    
+    
+    #for(k in 1:N.genus) {
+    #alpha.genus[k] ~ dnorm(mu.genus, tau.genus) # genus random effect
+    #  }	
+    
+    
+    for(j in 1:N.species) {
+    alpha[j] ~ dnorm(mu.species[j], tau.species) # species effect (mean and variance)
+    mu.species[j] <- kappa + c.prov * prov[j] + c.range * range[j]
+    }
+    
+    for(i in 1:length(y)) {
+    mu[i] <-  alpha[species[i]] + b.leafn * leafn[i] + b.lignin * lignin[i] +
+    b.provleafn * prov[i] * leafn[i] + b.provlignin * prov[i] * lignin[i] + 
+    b.provleafnlignin * prov[i] * leafn[i] * lignin[i] # fixed effects
+    y[i] ~ dnorm(mu[i], tau)
+    }	
+    
+    
+    # priors for variance components
+    #  x.tau <- x.sigma^-2
+    #  x.sigma ~ dunif(0, 100)  
+    #tau.genus <- sigma.genus^-2
+    #sigma.genus ~ dunif(0, 100)
+    tau.species <- sigma.species^-2 
+    sigma.species ~ dunif(0, 100) 
+    kappa ~ dnorm(0, 0.00001)
+    
+    
+    # priors for fixed effects
+    #    b0 ~ dnorm(0, 0.00001)
+    c.prov ~ dnorm(0, 0.00001)
+    c.range ~ dnorm(0, 0.00001)
+    b.leafn ~ dnorm(0, 0.00001)
+    b.lignin ~ dnorm(0, 0.00001)
+    b.provleafn ~ dnorm(0, 0.00001)
+    b.provlignin ~ dnorm(0, 0.00001)
+    b.provleafnlignin ~ dnorm(0, 0.00001)
+    tau <- 1 / sigma^2
+    sigma ~ dunif(0, 50)
+    
+    } # end model
+    
+    ", fill = TRUE)
+sink()
+
+
+
+
+# Input lists for JAGs
+
+fungal3.data <- list(prov = as.numeric(damage$Provenance) - 1,
+                     range = standard(damage$range),
+                     leafn = standard(damage$tissue.N),
+                     lignin = standard(damage$lignin.mass),
+                     y = car::logit(damage$fungal), 
+                     # Turn random effects (family, genus, species) into numeric vectors
+                     #family = as.numeric(factor(damage$family)),
+                     #genus = as.numeric(factor(damage$Genus)),
+                     species = as.numeric(factor(damage$Species)),
+                     # Get length for each group
+                     #N.family = length(unique(fungal.data.2$family)),
+                     #N.genus = length(unique(fungal.data.2$genus)),
+                     N.species = length(unique(damage$Species)))
+
+
+fungal3 <- jags.model('mod3.R', data = fungal3.data, #inits = fungal.inits, #parameters.to.save = fungal.parameters, 
+                      n.chains = 3)
+
+fungal3.coda <- coda.samples(fungal3, 
+                             variable.names = c('alpha', "c.prov", 'c.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma"), 
+                             n.iter = 10000, n.thin = 1)
+summary(fungal3.coda)
 
 
