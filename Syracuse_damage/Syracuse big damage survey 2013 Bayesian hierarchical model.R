@@ -287,6 +287,15 @@ model {
     b.provleafnlignin * prov[i] * leafn[i] * lignin[i] # fixed effects
     y[i] ~ dnorm(mu[i], tau)
   }	
+
+
+# Derived quantities
+  for (p in 1:N.species) {
+    for (m in 1:length(N)) {
+    native.leafn[m] <- alpha[p] + c.prov * 1 + b.leafn * N[m] + b.provleafn * 1 * N[m]
+    exotic.leafn[m] <- alpha[p] + c.prov * 0 + b.leafn * N[m] + b.provleafn * 0 * N[m]
+    }
+  }
     
     
 # priors for variance components
@@ -307,6 +316,9 @@ model {
   b.provleafnlignin ~ dnorm(0, 0.00001)
   tau <- 1 / sigma^2
   sigma ~ dunif(0, 50)
+
+
+
     
 } # end model
   
@@ -326,13 +338,25 @@ fungal4.data <- list(prov = as.numeric(damage$Provenance) - 1,
                      species = as.numeric(factor(damage$Species)),
                      # Get length for each group
                      N.genus = length(unique(damage$Genus)),
-                     N.species = length(unique(damage$Species)))
+                     N.species = length(unique(damage$Species)), 
+                     # For derived quantity - provenance x leaf N 
+                     N = seq(-3, 3, by = 0.01))
 
 
 fungal4 <- jags.model('mod4.R', data = fungal4.data, #inits = fungal.inits, #parameters.to.save = fungal.parameters, 
                       n.chains = 3)
 
 fungal4.coda <- coda.samples(fungal4, 
-                             variable.names = c('kappa', 'alpha', "c.prov", 'c.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma"), 
+                             variable.names = c('alpha', "c.prov", 'c.range', 'b.leafn', 'b.lignin', 'b.provleafn', 'b.provlignin', 'b.provleafnlignin', "sigma"), 
                              n.iter = 10000, n.thin = 1)
-summary(fungal4.coda)
+  summary(fungal4.coda)
+  
+fungal4.jags <- jags.samples(fungal4, 
+                             variable.names = c('exotic.leafn', 'native.leafn'), 
+                             n.iter = 10000, n.thin = 1)
+b <- summary(fungal4.jags$exotic.leafn, quantile, c(0.025, 0.5, 0.975))$stat
+c <- summary(fungal4.jags$native.leafn, quantile, c(0.025, 0.5, 0.975))$stat
+  plot(N, b[2,], xlab = "Foliar N content", ylab = "Foliar fungal damage", type = "l")
+  lines(N, c[2,], lty = 'dashed')
+  lines(N, b[1,], lty = "dashed")
+  lines(N, b[3,], lty = "dashed")
