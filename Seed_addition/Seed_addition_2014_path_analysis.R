@@ -184,3 +184,48 @@ germ.3.coda <- coda.samples(germ.3,
                                                'alpha.light', 'e.fert', 'e.spray', 'e.rake'), 
                             n.iter = 10000, n.thin = 1)
 summary(germ.3.coda)
+
+
+
+## ---- Mass per seed Bernoulli-gamma mixture ----
+sink('mod.mix1.R')
+cat("
+  model {
+
+# Likelihood  
+  for(i in 1 : length(w)) {
+  w[i] ~ dbern(p[i])
+    logit(p[i]) <- c0 + c.fert * Nut[i] + c.spray * Enemy.Exclusion[i] + c.rake * Litter.Removal[i]
+
+  y[i] ~ dgamma(mu[i]^2 / sigma^2, mu[i] / sigma^2)
+    mu[i] <- exp(b0 + b.fert * Nut[i] + b.spray * Enemy.Exclusion[i] + b.rake * Litter.Removal[i])
+  }
+
+# Priors
+  b0 ~ dnorm(0, 1)
+  b.fert ~ dnorm(0, 0.01)
+  b.spray ~ dnorm(0, 0.01)
+  b.rake ~ dnorm(0, 0.01)
+  sigma ~ dunif(0, 50)
+
+  c0 ~ dnorm(0, 0.01)
+  c.fert ~ dnorm(0, 0.01)
+  c.spray ~ dnorm(0, 0.01)
+  c.rake ~ dnorm(0, 0.01)
+
+
+} # end model
+    
+    ", fill = TRUE)
+sink()
+
+
+germ.mass.data.1 <- list(Nut = as.numeric(germ$Nut) - 1,
+                         Enemy.Exclusion = as.numeric(germ$Enemy.Exclusion) - 1,
+                         Litter.Removal = as.numeric(germ$Litter.Removal) - 1,
+                         y = 10 * germ$massperseed, 
+                         w = ifelse(germ$massperseed == 0, 0, 1))
+
+
+germ.mass.1 <- jags.model('mod.mix1.R', data = germ.mass.data.1,
+                          n.chains = 3)
