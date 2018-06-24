@@ -321,20 +321,73 @@ germ.2013.1.coda <- coda.samples(germ.2013.1,
 summary(germ.2013.1.coda)
 
 
-## ---- Bayesian single-level Gamma-Poisson model 2013, with environmental mediators ----
+## ---- Bayesian single-level Gamma-Poisson model 2013, treatments only ----
 
 sink('mod2_2013.R')
 cat("
 model {
     
   for(i in 1:length(y)) {
+    y[i] ~ dnegbin(kappa / (kappa + mu[i]), kappa)
+    #lambda[i] ~ dgamma(mu[i]^2 / sigma^2, mu[i] / sigma^2)
+    log(mu[i]) <- alpha + b.fert * Nut[i] + b.spray * Enemy.Exclusion[i] + b.rake * Litter.Removal[i] +
+      b.fert.spray * Nut[i] * Enemy.Exclusion[i] + b.fert.rake * Nut[i] * Litter.Removal[i] + 
+      b.spray.rake * Enemy.Exclusion[i] * Litter.Removal[i] + 
+      b.fert.spray.rake * Nut[i] * Enemy.Exclusion[i] * Litter.Removal[i] 
+  }
     
-  y[i] ~ dpois(lambda[i])
-    lambda[i] ~ dgamma(mu[i]^2 / sigma^2, mu[i] / sigma^2)
-    log(mu[i]) <- alpha.germ + b.fert * Nut[i] + b.light * lightavg.std[i] #+ b.damage * tot.damage.std[i]  
     
-#    tot.damage.std[i] ~ dnorm(mu.damage[i], tau.damage) 
-#    mu.damage[i] <- alpha.dam + c.fert * Nut[i] + c.spray * Enemy.Exclusion[i] + c.rake * Litter.Removal[i]
+# priors for fixed effects
+  alpha ~ dnorm(0, 0.01)
+  b.fert ~ dnorm(0, 0.01)
+  b.spray ~ dnorm(0, 0.01)
+  b.rake ~ dnorm(0, 0.01)
+  b.fert.spray ~ dnorm(0, 0.01)
+  b.fert.rake ~ dnorm(0, 0.01)
+  b.spray.rake ~ dnorm(0, 0.01)
+  b.fert.spray.rake ~ dnorm(0, 0.01)
+  kappa ~ dunif(0, 50)
+  
+} # end model
+    
+", fill = TRUE)
+sink()
+
+
+# Input lists for JAGs
+germ.2013.data.2 <- list(Nut = as.numeric(seed2013$Nut) - 1, 
+                         Enemy.Exclusion = as.numeric(seed2013$Enemy.Exclusion) - 1,
+                         Litter.Removal = as.numeric(seed2013$Litter.Removal) - 1,
+                         y = seed2013$Total.germ)
+
+
+germ.2013.2 <- jags.model('mod2_2013.R', data = germ.2013.data.2,
+                          n.chains = 3)
+
+
+germ.2013.2.coda <- coda.samples(germ.2013.2, 
+                                 variable.names = c('alpha', "b.fert", 'b.spray', 'b.rake', 
+                                                    'b.fert.spray', 'b.fert.rake', 'b.spray.rake', 
+                                                    'b.fert.spray.rake', 'kappa'), 
+                                 n.iter = 10000, n.thin = 1)
+summary(germ.2013.2.coda)
+
+
+## ---- Bayesian single-level Gamma-Poisson model 2013, with environmental mediators ----
+
+sink('mod3_2013.R')
+cat("
+model {
+    
+  for(i in 1:length(y)) {
+
+  y[i] ~ dnegbin(kappa / (kappa + mu[i]), kappa)
+    #lambda[i] ~ dgamma(mu[i]^2 / sigma^2, mu[i] / sigma^2)
+    log(mu[i]) <- alpha.germ + b.fert * Nut[i] + b.spray * Enemy.Exclusion[i] + b.rake * Litter.Removal[i] +
+      b.light * lightavg.std[i] + b.damage * tot.damage.std[i]  
+    
+    tot.damage.std[i] ~ dnorm(mu.damage[i], tau.damage) 
+    mu.damage[i] <- alpha.dam + c.fert * Nut[i] + c.spray * Enemy.Exclusion[i] + c.rake * Litter.Removal[i]
     
     lightavg.std[i] ~ dnorm(mu.light[i], tau.light)
     mu.light[i] <- alpha.light + e.fert * Nut[i] + e.spray * Enemy.Exclusion[i] + e.rake * Litter.Removal[i]
@@ -343,18 +396,20 @@ model {
     
 # priors for seedling response
   alpha.germ ~ dnorm(0, 0.01)
-#  b.damage ~ dnorm(0, 0.01)
+  b.damage ~ dnorm(0, 0.01)
   b.light ~ dnorm(0, 0.01)
   b.fert ~ dnorm(0, 0.01)
-  sigma ~ dunif(0, 15)
+  b.spray ~ dnorm(0, 0.01)
+  b.rake ~ dnorm(0, 0.01)
+  kappa ~ dunif(0, 15)
     
 # priors for damage response
-#  alpha.dam ~ dnorm(0, 0.01)
-#  c.fert ~ dnorm(0, 0.01)
-#  c.spray ~ dnorm(0, 0.01)
-#  c.rake ~ dnorm(0, 0.01)
-#  tau.damage <- 1 / sigma.damage^2
-#  sigma.damage ~ dunif(0, 50)
+  alpha.dam ~ dnorm(0, 0.01)
+  c.fert ~ dnorm(0, 0.01)
+  c.spray ~ dnorm(0, 0.01)
+  c.rake ~ dnorm(0, 0.01)
+  tau.damage <- 1 / sigma.damage^2
+  sigma.damage ~ dunif(0, 50)
     
     
 # priors for light response
@@ -373,7 +428,7 @@ sink()
 
 
 # Input lists for JAGs
-germ.2013.data.2 <- list(#tot.damage.std = seed2013$Total.damage.std,
+germ.2013.data.3 <- list(tot.damage.std = seed2013$Total.damage.std,
                          lightavg.std = seed2013$Light.std,
                          Nut = as.numeric(seed2013$Nut) - 1,
                          Enemy.Exclusion = as.numeric(seed2013$Enemy.Exclusion) - 1,
@@ -381,13 +436,14 @@ germ.2013.data.2 <- list(#tot.damage.std = seed2013$Total.damage.std,
                          y = seed2013$Total.germ)
 
 
-germ.2013.2 <- jags.model('mod2_2013.R', data = germ.2013.data.2,
+germ.2013.3 <- jags.model('mod3_2013.R', data = germ.2013.data.3,
                           n.chains = 3)
 
 
-germ.2013.2.coda <- coda.samples(germ.2013.2, 
-                                 variable.names = c('alpha.germ', 'b.fert', 'b.light', #'b.damage', 
-                                                    #'alpha.dam', 'c.fert', 'c.spray', 'c.rake', 
+germ.2013.3.coda <- coda.samples(germ.2013.3, 
+                                 variable.names = c('alpha.germ', 'b.fert', 'b.spray', 'b.rake', 
+                                                    'b.light', 'b.damage', 
+                                                    'alpha.dam', 'c.fert', 'c.spray', 'c.rake', 
                                                     'alpha.light', 'e.fert', 'e.spray', 'e.rake'), 
                                  n.iter = 10000, n.thin = 1)
-summary(germ.2013.2.coda)
+summary(germ.2013.3.coda)
